@@ -30,6 +30,13 @@ export default async function handler(
   req: ExtendedNextApiRequest,
   res: NextApiResponse<Data>
 ) {
+  // Check if REPLICATE_API_KEY is set
+  if (!process.env.REPLICATE_API_KEY) {
+    console.error("REPLICATE_API_KEY is not set in the environment variables");
+    res.status(500).json("Server configuration error: API key is missing");
+    return;
+  }
+
   // Rate Limiter Code
   if (ratelimit) {
     const identifier = requestIp.getClientIp(req);
@@ -106,6 +113,10 @@ export default async function handler(
     console.log("API Response Body:", JSON.stringify(jsonStartResponse));
 
     if (!startResponse.ok) {
+      if (startResponse.status === 401) {
+        console.error("Authentication failed. Please check your REPLICATE_API_KEY.");
+        throw new Error("Authentication failed. Please check your API key.");
+      }
       throw new Error(`API request failed for model ${model} (version ${modelConfig.version}) with status ${startResponse.status}: ${JSON.stringify(jsonStartResponse)}`);
     }
 
