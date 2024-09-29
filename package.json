@@ -3,7 +3,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "postbuild": "next-sitemap"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.7",
@@ -13,6 +14,7 @@
     "@vercel/analytics": "^0.1.9-beta.4",
     "framer-motion": "^8.2.4",
     "next": "latest",
+    "next-sitemap": "^4.2.3",
     "nsfwjs": "^2.4.2",
     "react": "18.2.0",
     "react-compare-slider": "^2.2.0",
