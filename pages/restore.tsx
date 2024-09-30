@@ -72,6 +72,7 @@ const Home: NextPage = () => {
   const [ps2Style, setPS2Style] = useState<string>("general");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [processingMessage, setProcessingMessage] = useState<string>("");
 
   useEffect(() => {
     const isDarkMode = localStorage.getItem("darkMode") === "true";
@@ -134,26 +135,58 @@ const Home: NextPage = () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        imageUrl: fileUrl,
-        prompt: prompt,
-        style: "Video game",
-      }),
-    });
+    setProcessingMessage("Initializing PS2 transformation...");
 
-    let newPhoto = await res.json();
-    if (res.status !== 200) {
-      setError(newPhoto);
-    } else {
-      const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
-      setRestoredImage(imageUrl);
-    }
-    setLoading(false);
+    const generateRequest = async () => {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageUrl: fileUrl,
+          prompt: prompt,
+          style: "Video game",
+        }),
+      });
+
+      if (res.status === 200) {
+        const newPhoto = await res.json();
+        const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
+        setRestoredImage(imageUrl);
+        setLoading(false);
+        setProcessingMessage("");
+      } else if (res.status === 202) {
+        setProcessingMessage("PS2 transformation in progress. This may take a while...");
+        // Poll for result
+        const pollInterval = setInterval(async () => {
+          const pollRes = await fetch("/api/generate", {
+            method: "GET",
+          });
+          if (pollRes.status === 200) {
+            clearInterval(pollInterval);
+            const newPhoto = await pollRes.json();
+            const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
+            setRestoredImage(imageUrl);
+            setLoading(false);
+            setProcessingMessage("");
+          } else if (pollRes.status !== 202) {
+            clearInterval(pollInterval);
+            const errorData = await pollRes.json();
+            setError(errorData.error || "An unexpected error occurred");
+            setLoading(false);
+            setProcessingMessage("");
+          }
+        }, 5000); // Poll every 5 seconds
+      } else {
+        const errorData = await res.json();
+        setError(errorData.error || "An unexpected error occurred");
+        setLoading(false);
+        setProcessingMessage("");
+      }
+    };
+
+    await generateRequest();
   }
 
   const handlePreview = () => {
@@ -297,6 +330,11 @@ const Home: NextPage = () => {
                     <LoadingDots color="white" style="large" />
                   </span>
                 </button>
+              )}
+              {processingMessage && (
+                <p className={`mt-4 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  {processingMessage}
+                </p>
               )}
               {error && (
                 <div

@@ -4,7 +4,7 @@ import requestIp from "request-ip";
 import redis from "../../utils/redis";
 import { getModelConfig } from "../../utils/modelConfig";
 
-type Data = string;
+type Data = string | { error: string };
 interface ExtendedNextApiRequest extends NextApiRequest {
   body: {
     imageUrl: string;
@@ -26,14 +26,26 @@ const ratelimit = redis
   })
   : undefined;
 
+// Set a longer timeout for the API route (60 seconds, which is the maximum for Vercel serverless functions)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+    responseLimit: false,
+  },
+};
+
 export default async function handler(
   req: ExtendedNextApiRequest,
   res: NextApiResponse<Data>
 ) {
+  console.log("API handler started");
+
   // Check if REPLICATE_API_KEY is set
   if (!process.env.REPLICATE_API_KEY) {
     console.error("REPLICATE_API_KEY is not set in the environment variables");
-    res.status(500).json("Server configuration error: API key is missing");
+    res.status(500).json({ error: "Server configuration error: API key is missing" });
     return;
   }
 
@@ -45,9 +57,7 @@ export default async function handler(
     res.setHeader("X-RateLimit-Remaining", result.remaining);
 
     if (!result.success) {
-      res
-        .status(429)
-        .json("Too many uploads in 1 day. Please try again after 24 hours.");
+      res.status(429).json({ error: "Too many uploads in 1 day. Please try again after 24 hours." });
       return;
     }
   }
@@ -129,7 +139,7 @@ export default async function handler(
     // GET request to get the status of the image generation process & return the result when it's ready
     let generatedImage: string | null = null;
     let retries = 0;
-    const maxRetries = 30; // Adjust as needed
+    const maxRetries = 12; // 60 seconds with 5-second intervals
     while (!generatedImage && retries < maxRetries) {
       console.log(`Polling for result... (Attempt ${retries + 1}/${maxRetries})`);
       let finalResponse = await fetch(endpointUrl, {
@@ -144,26 +154,36 @@ export default async function handler(
 
       if (jsonFinalResponse.status === "succeeded") {
         generatedImage = jsonFinalResponse.output;
+        console.log("Image generation succeeded");
       } else if (jsonFinalResponse.status === "failed") {
         const errorMessage = jsonFinalResponse.error || "Unknown error occurred";
+        console.error(`Image generation failed: ${errorMessage}`);
         if (errorMessage.includes("No face detected")) {
           throw new Error("No face detected in the uploaded image. Please try a different image with a clear face.");
         } else {
           throw new Error(`Image generation failed for model ${model} (version ${modelConfig.version}): ${errorMessage}`);
         }
-      } else {
+      } else if (jsonFinalResponse.status === "processing") {
+        console.log("Image is still processing...");
         retries++;
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for 2 seconds before next poll
+        await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait for 5 seconds before next poll
+      } else {
+        console.warn(`Unexpected status: ${jsonFinalResponse.status}`);
+        retries++;
+        await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait for 5 seconds before next poll
       }
     }
 
     if (!generatedImage) {
-      throw new Error(`Image generation timed out for model ${model} after ${maxRetries} attempts`);
+      console.error(`Image generation timed out after ${maxRetries} attempts`);
+      res.status(202).json({ error: "Image generation is taking longer than expected. Please check back later." });
+      return;
     }
 
+    console.log("Sending successful response");
     res.status(200).json(generatedImage);
   } catch (error) {
     console.error("Error in image generation:", error);
-    res.status(500).json("Failed to generate image: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to generate image: " + (error as Error).message });
   }
 }
