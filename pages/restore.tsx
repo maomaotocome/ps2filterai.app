@@ -151,9 +151,16 @@ const Home: NextPage = () => {
           }),
         });
 
+        let jsonResponse;
+        try {
+          jsonResponse = await res.json();
+        } catch (err) {
+          console.error("Error parsing JSON response:", err);
+          throw new Error("Failed to parse server response");
+        }
+
         if (res.status === 200) {
-          const newPhoto = await res.json();
-          const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
+          const imageUrl = Array.isArray(jsonResponse) ? jsonResponse[0] : jsonResponse;
           setRestoredImage(imageUrl);
           setLoading(false);
           setProcessingMessage("");
@@ -165,17 +172,17 @@ const Home: NextPage = () => {
               const pollRes = await fetch("/api/generate", {
                 method: "GET",
               });
+              const pollJsonResponse = await pollRes.json();
+
               if (pollRes.status === 200) {
                 clearInterval(pollInterval);
-                const newPhoto = await pollRes.json();
-                const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
+                const imageUrl = Array.isArray(pollJsonResponse) ? pollJsonResponse[0] : pollJsonResponse;
                 setRestoredImage(imageUrl);
                 setLoading(false);
                 setProcessingMessage("");
               } else if (pollRes.status !== 202) {
                 clearInterval(pollInterval);
-                const errorData = await pollRes.json();
-                throw new Error(errorData.error || "An unexpected error occurred");
+                throw new Error(pollJsonResponse.error || "An unexpected error occurred");
               }
             } catch (error) {
               clearInterval(pollInterval);
@@ -186,8 +193,7 @@ const Home: NextPage = () => {
             }
           }, 5000); // Poll every 5 seconds
         } else {
-          const errorData = await res.json();
-          throw new Error(errorData.error || "An unexpected error occurred");
+          throw new Error(jsonResponse.error || "An unexpected error occurred");
         }
       } catch (error) {
         console.error("Error in generate request:", error);
