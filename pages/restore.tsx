@@ -73,6 +73,7 @@ const Home: NextPage = () => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [processingMessage, setProcessingMessage] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const isDarkMode = localStorage.getItem("darkMode") === "true";
@@ -151,16 +152,9 @@ const Home: NextPage = () => {
           }),
         });
 
-        let jsonResponse;
-        try {
-          jsonResponse = await res.json();
-        } catch (err) {
-          console.error("Error parsing JSON response:", err);
-          throw new Error("Failed to parse server response");
-        }
-
         if (res.status === 200) {
-          const imageUrl = Array.isArray(jsonResponse) ? jsonResponse[0] : jsonResponse;
+          const newPhoto = await res.json();
+          const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
           setRestoredImage(imageUrl);
           setLoading(false);
           setProcessingMessage("");
@@ -172,17 +166,17 @@ const Home: NextPage = () => {
               const pollRes = await fetch("/api/generate", {
                 method: "GET",
               });
-              const pollJsonResponse = await pollRes.json();
-
               if (pollRes.status === 200) {
                 clearInterval(pollInterval);
-                const imageUrl = Array.isArray(pollJsonResponse) ? pollJsonResponse[0] : pollJsonResponse;
+                const newPhoto = await pollRes.json();
+                const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
                 setRestoredImage(imageUrl);
                 setLoading(false);
                 setProcessingMessage("");
               } else if (pollRes.status !== 202) {
                 clearInterval(pollInterval);
-                throw new Error(pollJsonResponse.error || "An unexpected error occurred");
+                const errorData = await pollRes.json();
+                throw new Error(errorData.error || "An unexpected error occurred");
               }
             } catch (error) {
               clearInterval(pollInterval);
@@ -193,7 +187,8 @@ const Home: NextPage = () => {
             }
           }, 5000); // Poll every 5 seconds
         } else {
-          throw new Error(jsonResponse.error || "An unexpected error occurred");
+          const errorData = await res.json();
+          throw new Error(errorData.error || "An unexpected error occurred");
         }
       } catch (error) {
         console.error("Error in generate request:", error);
@@ -210,6 +205,15 @@ const Home: NextPage = () => {
     if (originalPhoto) {
       // This is a mock preview. In a real scenario, you'd generate a low-res preview using the API
       setPreviewImage(originalPhoto);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIsLoading(true);
+    try {
+      // ... 处理逻辑 ...
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -422,6 +426,14 @@ const Home: NextPage = () => {
                   <p className="text-sm text-gray-500 mt-2">
                     This is a low-resolution preview. The final result may vary.
                   </p>
+                </div>
+              )}
+              {isLoading && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                  <div className="bg-white p-4 rounded-lg">
+                    <p>正在处理图像,请稍候...</p>
+                    {/* 可以添加一个加载动画 */}
+                  </div>
                 </div>
               )}
             </motion.div>

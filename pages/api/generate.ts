@@ -188,7 +188,14 @@ export default async function handler(
     console.log("Sending successful response");
     res.status(200).json(generatedImage);
   } catch (error) {
-    console.error("Error in image generation:", error);
-    res.status(500).json({ error: "Failed to generate image: " + (error as Error).message });
+    if (error instanceof Error) {
+      if (error.message.includes('API key')) {
+        return res.status(401).json({ error: 'API密钥无效或未提供' });
+      } else if (error.message.includes('rate limit')) {
+        return res.status(429).json({ error: '请求频率超限,请稍后再试' });
+      }
+    }
+    console.error('处理请求时发生错误:', error);
+    res.status(500).json({ error: '服务器内部错误,请稍后再试' });
   }
 }
