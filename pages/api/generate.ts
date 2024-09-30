@@ -44,40 +44,38 @@ export default async function handler(
   console.log("Request method:", req.method);
   console.log("Request body:", JSON.stringify(req.body));
 
-  // Check if REPLICATE_API_KEY is set
-  if (!process.env.REPLICATE_API_KEY) {
-    console.error("REPLICATE_API_KEY is not set in the environment variables");
-    res.status(500).json({ error: "Server configuration error: API key is missing" });
-    return;
-  }
-
-  // Rate Limiter Code
-  if (ratelimit) {
-    const identifier = requestIp.getClientIp(req);
-    console.log("Client IP:", identifier);
-    const result = await ratelimit.limit(identifier!);
-    res.setHeader("X-RateLimit-Limit", result.limit);
-    res.setHeader("X-RateLimit-Remaining", result.remaining);
-
-    if (!result.success) {
-      console.log("Rate limit exceeded for IP:", identifier);
-      res.status(429).json({ error: "Too many uploads in 1 day. Please try again after 24 hours." });
-      return;
-    }
-  }
-
-  const imageUrl = req.body.imageUrl;
-  let prompt = req.body.prompt;
-  const style = req.body.style || "Video game";
-  const prompt_strength = req.body.prompt_strength;
-  const denoising_strength = req.body.denoising_strength;
-  const instant_id_strength = req.body.instant_id_strength;
-  let negative_prompt = req.body.negative_prompt;
-
-  const model = "face-to-many";
-  console.log(`Processing with model: ${model}`);
-
   try {
+    // Check if REPLICATE_API_KEY is set
+    if (!process.env.REPLICATE_API_KEY) {
+      console.error("REPLICATE_API_KEY is not set in the environment variables");
+      return res.status(500).json({ error: "Server configuration error: API key is missing" });
+    }
+
+    // Rate Limiter Code
+    if (ratelimit) {
+      const identifier = requestIp.getClientIp(req);
+      console.log("Client IP:", identifier);
+      const result = await ratelimit.limit(identifier!);
+      res.setHeader("X-RateLimit-Limit", result.limit);
+      res.setHeader("X-RateLimit-Remaining", result.remaining);
+
+      if (!result.success) {
+        console.log("Rate limit exceeded for IP:", identifier);
+        return res.status(429).json({ error: "Too many uploads in 1 day. Please try again after 24 hours." });
+      }
+    }
+
+    const imageUrl = req.body.imageUrl;
+    let prompt = req.body.prompt;
+    const style = req.body.style || "Video game";
+    const prompt_strength = req.body.prompt_strength;
+    const denoising_strength = req.body.denoising_strength;
+    const instant_id_strength = req.body.instant_id_strength;
+    let negative_prompt = req.body.negative_prompt;
+
+    const model = "face-to-many";
+    console.log(`Processing with model: ${model}`);
+
     const modelConfig = getModelConfig(model);
 
     if (!modelConfig) {
@@ -130,13 +128,13 @@ export default async function handler(
     if (!startResponse.ok) {
       if (startResponse.status === 401) {
         console.error("Authentication failed. Please check your REPLICATE_API_KEY.");
-        throw new Error("Authentication failed. Please check your API key.");
+        return res.status(401).json({ error: "Authentication failed. Please check your API key." });
       }
-      throw new Error(`API request failed for model ${model} (version ${modelConfig.version}) with status ${startResponse.status}: ${JSON.stringify(jsonStartResponse)}`);
+      return res.status(startResponse.status).json({ error: `API request failed for model ${model} (version ${modelConfig.version}) with status ${startResponse.status}: ${JSON.stringify(jsonStartResponse)}` });
     }
 
     if (!jsonStartResponse.urls || !jsonStartResponse.urls.get) {
-      throw new Error(`Invalid response from Replicate API for model ${model} (version ${modelConfig.version}): ${JSON.stringify(jsonStartResponse)}`);
+      return res.status(500).json({ error: `Invalid response from Replicate API for model ${model} (version ${modelConfig.version}): ${JSON.stringify(jsonStartResponse)}` });
     }
 
     let endpointUrl = jsonStartResponse.urls.get;
@@ -164,9 +162,9 @@ export default async function handler(
         const errorMessage = jsonFinalResponse.error || "Unknown error occurred";
         console.error(`Image generation failed: ${errorMessage}`);
         if (errorMessage.includes("No face detected")) {
-          throw new Error("No face detected in the uploaded image. Please try a different image with a clear face.");
+          return res.status(400).json({ error: "No face detected in the uploaded image. Please try a different image with a clear face." });
         } else {
-          throw new Error(`Image generation failed for model ${model} (version ${modelConfig.version}): ${errorMessage}`);
+          return res.status(500).json({ error: `Image generation failed for model ${model} (version ${modelConfig.version}): ${errorMessage}` });
         }
       } else if (jsonFinalResponse.status === "processing") {
         console.log("Image is still processing...");
@@ -181,21 +179,13 @@ export default async function handler(
 
     if (!generatedImage) {
       console.error(`Image generation timed out after ${maxRetries} attempts`);
-      res.status(202).json({ error: "Image generation is taking longer than expected. Please check back later." });
-      return;
+      return res.status(504).json({ error: "Image generation timed out. Please try again later." });
     }
 
     console.log("Sending successful response");
-    res.status(200).json(generatedImage);
+    return res.status(200).json(generatedImage);
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message.includes('API key')) {
-        return res.status(401).json({ error: 'API密钥无效或未提供' });
-      } else if (error.message.includes('rate limit')) {
-        return res.status(429).json({ error: '请求频率超限,请稍后再试' });
-      }
-    }
-    console.error('处理请求时发生错误:', error);
-    res.status(500).json({ error: '服务器内部错误,请稍后再试' });
+    console.error("Unexpected error:", error);
+    return res.status(500).json({ error: "An unexpected error occurred. Please try again later." });
   }
 }
