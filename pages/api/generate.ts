@@ -41,6 +41,8 @@ export default async function handler(
   res: NextApiResponse<Data>
 ) {
   console.log("API handler started");
+  console.log("Request method:", req.method);
+  console.log("Request body:", JSON.stringify(req.body));
 
   // Check if REPLICATE_API_KEY is set
   if (!process.env.REPLICATE_API_KEY) {
@@ -52,11 +54,13 @@ export default async function handler(
   // Rate Limiter Code
   if (ratelimit) {
     const identifier = requestIp.getClientIp(req);
+    console.log("Client IP:", identifier);
     const result = await ratelimit.limit(identifier!);
     res.setHeader("X-RateLimit-Limit", result.limit);
     res.setHeader("X-RateLimit-Remaining", result.remaining);
 
     if (!result.success) {
+      console.log("Rate limit exceeded for IP:", identifier);
       res.status(429).json({ error: "Too many uploads in 1 day. Please try again after 24 hours." });
       return;
     }
@@ -105,6 +109,7 @@ export default async function handler(
     }));
 
     // POST request to Replicate to start the image generation process
+    console.log("Sending request to Replicate API");
     let startResponse = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {

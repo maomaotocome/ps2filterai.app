@@ -138,49 +138,60 @@ const Home: NextPage = () => {
     setProcessingMessage("Initializing PS2 transformation...");
 
     const generateRequest = async () => {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          imageUrl: fileUrl,
-          prompt: prompt,
-          style: "Video game",
-        }),
-      });
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            imageUrl: fileUrl,
+            prompt: prompt,
+            style: "Video game",
+          }),
+        });
 
-      if (res.status === 200) {
-        const newPhoto = await res.json();
-        const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
-        setRestoredImage(imageUrl);
-        setLoading(false);
-        setProcessingMessage("");
-      } else if (res.status === 202) {
-        setProcessingMessage("PS2 transformation in progress. This may take a while...");
-        // Poll for result
-        const pollInterval = setInterval(async () => {
-          const pollRes = await fetch("/api/generate", {
-            method: "GET",
-          });
-          if (pollRes.status === 200) {
-            clearInterval(pollInterval);
-            const newPhoto = await pollRes.json();
-            const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
-            setRestoredImage(imageUrl);
-            setLoading(false);
-            setProcessingMessage("");
-          } else if (pollRes.status !== 202) {
-            clearInterval(pollInterval);
-            const errorData = await pollRes.json();
-            setError(errorData.error || "An unexpected error occurred");
-            setLoading(false);
-            setProcessingMessage("");
-          }
-        }, 5000); // Poll every 5 seconds
-      } else {
-        const errorData = await res.json();
-        setError(errorData.error || "An unexpected error occurred");
+        if (res.status === 200) {
+          const newPhoto = await res.json();
+          const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
+          setRestoredImage(imageUrl);
+          setLoading(false);
+          setProcessingMessage("");
+        } else if (res.status === 202) {
+          setProcessingMessage("PS2 transformation in progress. This may take a while...");
+          // Poll for result
+          const pollInterval = setInterval(async () => {
+            try {
+              const pollRes = await fetch("/api/generate", {
+                method: "GET",
+              });
+              if (pollRes.status === 200) {
+                clearInterval(pollInterval);
+                const newPhoto = await pollRes.json();
+                const imageUrl = Array.isArray(newPhoto) ? newPhoto[0] : newPhoto;
+                setRestoredImage(imageUrl);
+                setLoading(false);
+                setProcessingMessage("");
+              } else if (pollRes.status !== 202) {
+                clearInterval(pollInterval);
+                const errorData = await pollRes.json();
+                throw new Error(errorData.error || "An unexpected error occurred");
+              }
+            } catch (error) {
+              clearInterval(pollInterval);
+              console.error("Error during polling:", error);
+              setError((error as Error).message || "An unexpected error occurred during image processing");
+              setLoading(false);
+              setProcessingMessage("");
+            }
+          }, 5000); // Poll every 5 seconds
+        } else {
+          const errorData = await res.json();
+          throw new Error(errorData.error || "An unexpected error occurred");
+        }
+      } catch (error) {
+        console.error("Error in generate request:", error);
+        setError((error as Error).message || "An unexpected error occurred");
         setLoading(false);
         setProcessingMessage("");
       }
