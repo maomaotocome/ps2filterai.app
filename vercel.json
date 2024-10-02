@@ -1,8 +1,26 @@
 {
+    "version": 2,
     "builds": [
         {
             "src": "next.config.js",
             "use": "@vercel/next"
         }
-    ]
+    ],
+    "routes": [
+        {
+            "src": "/api/generate",
+            "dest": "/api/generate.ts",
+            "methods": [
+                "POST"
+            ],
+            "headers": {
+                "Access-Control-Allow-Origin": "*"
+            }
+        }
+    ],
+    "functions": {
+        "api/generate.ts": {
+            "maxDuration": 300
+        }
+    }
 }

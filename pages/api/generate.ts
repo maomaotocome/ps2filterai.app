@@ -145,7 +145,7 @@ export default async function handler(
     // GET request to get the status of the image generation process & return the result when it's ready
     let generatedImage: string | null = null;
     let retries = 0;
-    const maxRetries = 12; // 60 seconds with 5-second intervals
+    const maxRetries = 30; // 150 seconds with 5-second intervals
     while (!generatedImage && retries < maxRetries) {
       console.log(`Polling for result... (Attempt ${retries + 1}/${maxRetries})`);
       const finalResponse = await fetch(endpointUrl, {
