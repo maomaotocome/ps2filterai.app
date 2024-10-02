@@ -145,7 +145,7 @@ export default async function handler(
     // GET request to get the status of the image generation process & return the result when it's ready
     let generatedImage: string | null = null;
     let retries = 0;
-    const maxRetries = 30; // 150 seconds with 5-second intervals
+    const maxRetries = 60; // 5 minutes with 5-second intervals
     while (!generatedImage && retries < maxRetries) {
       console.log(`Polling for result... (Attempt ${retries + 1}/${maxRetries})`);
       const finalResponse = await fetch(endpointUrl, {
@@ -178,8 +178,8 @@ export default async function handler(
         } else {
           return res.status(500).json({ error: `Image generation failed for model ${model} (version ${modelConfig.version})`, details: errorMessage });
         }
-      } else if (jsonFinalResponse.status === "processing") {
-        console.log("Image is still processing...");
+      } else if (jsonFinalResponse.status === "processing" || jsonFinalResponse.status === "starting") {
+        console.log(`Image is still ${jsonFinalResponse.status}...`);
         retries++;
         await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait for 5 seconds before next poll
       } else {
