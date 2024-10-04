@@ -156,9 +156,9 @@ const Home: NextPage = () => {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
 
-      if (jsonResponse.result) {
-        console.log("Setting restored image URL:", jsonResponse.result);
-        setRestoredImage(jsonResponse.result);
+      if (jsonResponse.result && Array.isArray(jsonResponse.result) && jsonResponse.result.length > 0) {
+        console.log("Setting restored image URL:", jsonResponse.result[0]);
+        setRestoredImage(jsonResponse.result[0]);
         setLoading(false);
         setProcessingMessage("");
       } else {
