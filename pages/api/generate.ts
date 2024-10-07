@@ -109,8 +109,6 @@ export default async function handler(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "token": "r8_FFZ9Du26eKh67igmaBN2cdXCyd0OFqK1XZDKX",
-
         Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
       },
       body: JSON.stringify({
