@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import requestIp from "request-ip";
 import redis from "../../utils/redis";
 import { getModelConfig } from "../../utils/modelConfig";
+import Replicate from "replicate";
 
 type Data =
   | { result: string }
@@ -38,6 +39,9 @@ export const config = {
     responseLimit: false,
   },
 };
+
+// Helper function to delay execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default async function handler(
   req: ExtendedNextApiRequest,
@@ -103,96 +107,33 @@ export default async function handler(
       input: modelInput,
     }));
 
-    // POST request to Replicate to start the image generation process
-    console.log("Sending request to Replicate API");
-    const startResponse = await fetch("https://api.replicate.com/v1/predictions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
-      },
-      body: JSON.stringify({
-        version: modelConfig.version,
-        input: modelInput,
-      }),
+    // Initialize Replicate client
+    const replicate = new Replicate({
+      auth: process.env.REPLICATE_API_KEY,
     });
 
-    console.log("API Response Status:", startResponse.status);
-
-    let jsonStartResponse;
+    // Run the model
+    console.log("Sending request to Replicate API");
+    let output;
     try {
-      jsonStartResponse = await startResponse.json();
-      console.log("API Response Body:", JSON.stringify(jsonStartResponse));
-    } catch (error) {
-      console.error("Error parsing JSON response:", error);
-      return res.status(500).json({ error: "Failed to parse API response", details: (error as Error).message });
-    }
-
-    if (!startResponse.ok) {
-      if (startResponse.status === 401) {
-        console.error("Authentication failed. Please check your REPLICATE_API_KEY.");
-        return res.status(401).json({ error: "Authentication failed. Please check your API key." });
-      }
-      return res.status(startResponse.status).json({ error: `API request failed for model ${model} (version ${modelConfig.version}) with status ${startResponse.status}`, details: JSON.stringify(jsonStartResponse) });
-    }
-
-    if (!jsonStartResponse.urls || !jsonStartResponse.urls.get) {
-      return res.status(500).json({ error: `Invalid response from Replicate API for model ${model} (version ${modelConfig.version})`, details: JSON.stringify(jsonStartResponse) });
-    }
-
-    const endpointUrl = jsonStartResponse.urls.get;
-
-    // GET request to get the status of the image generation process & return the result when it's ready
-    let generatedImage: string | null = null;
-    let retries = 0;
-    const maxRetries = 60; // 5 minutes with 5-second intervals
-    while (!generatedImage && retries < maxRetries) {
-      console.log(`Polling for result... (Attempt ${retries + 1}/${maxRetries})`);
-      const finalResponse = await fetch(endpointUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
-        },
-      });
-
-      let jsonFinalResponse;
-      try {
-        jsonFinalResponse = await finalResponse.json();
-        console.log("Polling response:", JSON.stringify(jsonFinalResponse));
-      } catch (error) {
-        console.error("Error parsing JSON response during polling:", error);
-        return res.status(500).json({ error: "Failed to parse API response during polling", details: (error as Error).message });
-      }
-
-      if (jsonFinalResponse.status === "succeeded") {
-        generatedImage = jsonFinalResponse.output;
-        console.log("Image generation succeeded");
-        console.log("Generated Image URL:", generatedImage);
-        console.log("Full response object:", JSON.stringify(jsonFinalResponse));
-      } else if (jsonFinalResponse.status === "failed") {
-        const errorMessage = jsonFinalResponse.error || "Unknown error occurred";
-        console.error(`Image generation failed: ${errorMessage}`);
-        if (errorMessage.includes("No face detected")) {
-          return res.status(400).json({ error: "No face detected in the uploaded image. Please try a different image with a clear face." });
-        } else {
-          return res.status(500).json({ error: `Image generation failed for model ${model} (version ${modelConfig.version})`, details: errorMessage });
+      output = await replicate.run(
+        `${modelConfig.owner}/${model}:${modelConfig.version}`,
+        {
+          input: modelInput
         }
-      } else if (jsonFinalResponse.status === "processing" || jsonFinalResponse.status === "starting") {
-        console.log(`Image is still ${jsonFinalResponse.status}...`);
-        retries++;
-        await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait for 5 seconds before next poll
-      } else {
-        console.warn(`Unexpected status: ${jsonFinalResponse.status}`);
-        retries++;
-        await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait for 5 seconds before next poll
-      }
+      );
+      console.log("API Response:", output);
+    } catch (error) {
+      console.error("Error calling Replicate API:", error);
+      return res.status(500).json({ error: "Error calling Replicate API", details: (error as Error).message });
     }
 
-    if (!generatedImage) {
-      console.error(`Image generation timed out after ${maxRetries} attempts`);
-      return res.status(504).json({ error: "Image generation timed out. Please try again later." });
+    if (!output || !Array.isArray(output) || output.length === 0) {
+      console.error("Invalid response from Replicate API:", output);
+      throw new Error("Invalid response from Replicate API");
     }
+
+    const generatedImage = output[0];
 
     // Check if the generated image URL is valid
     try {

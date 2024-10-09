@@ -1,5 +1,6 @@
 interface ModelConfig {
     version: string;
+    owner: string;
     input: {
         [key: string]: any;
     };
@@ -12,6 +13,7 @@ interface ModelsConfig {
 const modelsConfig: ModelsConfig = {
     "gfpgan": {
         version: "9283608cc6b7be6b65a8e44983db012355fde4132009bf99d976b2f0896856a3",
+        owner: "tencentarc",
         input: {
             img: "",
             version: "v1.4",
@@ -20,6 +22,7 @@ const modelsConfig: ModelsConfig = {
     },
     "face-to-many": {
         version: "a07f252abbbd832009640b27f063ea52d87d7a23a185ca165bec23b5adc8deaf",
+        owner: "fofr",
         input: {
             image: "",
             prompt: "",
