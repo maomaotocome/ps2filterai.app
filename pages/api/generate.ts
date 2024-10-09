@@ -43,6 +43,42 @@ export const config = {
 // Helper function to delay execution
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper function to make a request with retries and timeout
+async function replicateApiCall(
+  replicate: Replicate,
+  modelString: `${string}/${string}:${string}`,
+  input: any,
+  maxRetries = 3,
+  timeout = 50000
+) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), timeout);
+
+      const output = await Promise.race([
+        replicate.run(modelString, { input }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Replicate API call timed out')), timeout)
+        )
+      ]);
+
+      clearTimeout(timeoutId);
+
+      if (output === undefined) {
+        throw new Error('Replicate API call timed out');
+      }
+
+      return output;
+    } catch (error) {
+      console.error(`Attempt ${i + 1} failed:`, error);
+      if (i === maxRetries - 1) throw error;
+      await delay(1000 * Math.pow(2, i)); // Exponential backoff
+    }
+  }
+  throw new Error(`Failed after ${maxRetries} retries`);
+}
+
 export default async function handler(
   req: ExtendedNextApiRequest,
   res: NextApiResponse<Data>
@@ -112,20 +148,28 @@ export default async function handler(
       auth: process.env.REPLICATE_API_KEY,
     });
 
-    // Run the model
+    // Run the model with retry and timeout
     console.log("Sending request to Replicate API");
     let output;
     try {
-      output = await replicate.run(
-        `${modelConfig.owner}/${model}:${modelConfig.version}`,
-        {
-          input: modelInput
-        }
+      output = await replicateApiCall(
+        replicate,
+        `${modelConfig.owner}/${model}:${modelConfig.version}` as const,
+        modelInput
       );
       console.log("API Response:", output);
     } catch (error) {
       console.error("Error calling Replicate API:", error);
-      return res.status(500).json({ error: "Error calling Replicate API", details: (error as Error).message });
+      let errorMessage = "Error calling Replicate API";
+      let errorDetails = (error as Error).message;
+
+      // Check if the error response is HTML
+      if (typeof errorDetails === 'string' && errorDetails.trim().startsWith('<!DOCTYPE html>')) {
+        errorMessage = "Received HTML response instead of JSON";
+        errorDetails = "The Replicate API returned an HTML error page. This might indicate a server-side issue.";
+      }
+
+      return res.status(500).json({ error: errorMessage, details: errorDetails });
     }
 
     if (!output || !Array.isArray(output) || output.length === 0) {
