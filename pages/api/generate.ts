@@ -53,6 +53,7 @@ async function replicateApiCall(
 ) {
   for (let i = 0; i < maxRetries; i++) {
     try {
+      console.log(`Attempt ${i + 1} to call Replicate API`);
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort(), timeout);
 
@@ -69,6 +70,7 @@ async function replicateApiCall(
         throw new Error('Replicate API call timed out');
       }
 
+      console.log('Replicate API call successful');
       return output;
     } catch (error) {
       console.error(`Attempt ${i + 1} failed:`, error);
@@ -93,6 +95,8 @@ export default async function handler(
       console.error("REPLICATE_API_KEY is not set in the environment variables");
       return res.status(500).json({ error: "Server configuration error: API key is missing" });
     }
+
+    console.log("REPLICATE_API_KEY is set");
 
     // Rate Limiter Code
     if (ratelimit) {
@@ -144,6 +148,7 @@ export default async function handler(
     }));
 
     // Initialize Replicate client
+    console.log("Initializing Replicate client");
     const replicate = new Replicate({
       auth: process.env.REPLICATE_API_KEY,
     });
@@ -160,16 +165,7 @@ export default async function handler(
       console.log("API Response:", output);
     } catch (error) {
       console.error("Error calling Replicate API:", error);
-      let errorMessage = "Error calling Replicate API";
-      let errorDetails = (error as Error).message;
-
-      // Check if the error response is HTML
-      if (typeof errorDetails === 'string' && errorDetails.trim().startsWith('<!DOCTYPE html>')) {
-        errorMessage = "Received HTML response instead of JSON";
-        errorDetails = "The Replicate API returned an HTML error page. This might indicate a server-side issue.";
-      }
-
-      return res.status(500).json({ error: errorMessage, details: errorDetails });
+      return res.status(500).json({ error: "Error calling Replicate API", details: (error as Error).message });
     }
 
     if (!output || !Array.isArray(output) || output.length === 0) {
