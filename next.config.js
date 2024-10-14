@@ -4,6 +4,10 @@ module.exports = {
   images: {
     domains: ["upcdn.io", "replicate.delivery", "replicate.com", "pbxt.replicate.delivery"],
   },
+  env: {
+    REPLICATE_API_KEY: process.env.REPLICATE_API_KEY,
+    CURRENT_MODEL: process.env.CURRENT_MODEL || "gfpgan",
+  },
   async headers() {
     return [
       {
