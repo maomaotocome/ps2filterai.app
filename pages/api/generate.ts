@@ -89,6 +89,15 @@ export default async function handler(
   console.log("Request method:", req.method);
   console.log("Request body:", JSON.stringify(req.body));
 
+  // Simple health check
+  if (req.method === 'GET') {
+    return res.status(200).json({ result: "API is healthy" });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
     // Check if REPLICATE_API_KEY is set
     if (!process.env.REPLICATE_API_KEY) {
@@ -187,6 +196,10 @@ export default async function handler(
     return res.status(200).json({ result: generatedImage });
   } catch (error) {
     console.error("Unexpected error:", error);
+    // Check if the error message contains HTML
+    if (typeof (error as Error).message === 'string' && (error as Error).message.includes('<!DOCTYPE html>')) {
+      return res.status(500).json({ error: "Received HTML response instead of JSON", details: "The API returned an HTML error page. This might indicate a server-side issue." });
+    }
     return res.status(500).json({ error: "An unexpected error occurred. Please try again later.", details: (error as Error).message });
   }
 }
